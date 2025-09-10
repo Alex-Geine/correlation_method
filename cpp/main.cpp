@@ -1,5 +1,7 @@
 #include <iostream>
+
 #include "Generator.h"
+#include "Correlator.h"
 
 int main()
 {
