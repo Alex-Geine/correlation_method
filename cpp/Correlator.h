@@ -4,7 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <complex>
-#include <stdint>
+#include <cstdint>
 
 class Correlator
 {
@@ -14,9 +14,9 @@ private: // functions
 //! [in]  data_a        - First signal to correlate
 //! [in]  data_b        - Second signal to correlate
 //! [out] corr_out      - Output correlation samples
-static void findCorrelation(const std::vector<complex<double>>& data_a,
-                            const std::vector<complex<double>>& data_b,
-                                  std::vector<double>&          corr_out);
+static void findCorrelation(const std::vector<std::complex<double>>& data_a,
+                            const std::vector<std::complex<double>>& data_b,
+                                  std::vector<double>&               corr_out);
 
 public: // functions
 
@@ -25,18 +25,18 @@ public: // functions
 //! [in]  data_b        - Second signal to correlate
 //! [out] corr_out      - Output correlation samples
 //! [out] max_metric_id - Index of maximum metric of the correlation
-static void correlate(const std::vector<complex<double>>& data_a,
-                      const std::vector<complex<double>>& data_b,
-                            std::vector<double>&          corr_out,
-                            uint32_t&                     max_metric_id);
+static void correlate(const std::vector<std::complex<double>>& data_a,
+                      const std::vector<std::complex<double>>& data_b,
+                            std::vector<double>&               corr_out,
+                            uint32_t&                          max_metric_id);
 
 // Process correlation without ouput data
 //! [in]  data_a        - Output generated AWGN
 //! [in]  data_b        - Size of the output data
 //! [out] max_metric_id - Index of maximum metric of the correlation
-static void correlate(const std::vector<complex<double>>& data_a,
-                      const std::vector<complex<double>>& data_b,
-                            uint32_t&                     max_metric_id);
+static void correlate(const std::vector<std::complex<double>>& data_a,
+                      const std::vector<std::complex<double>>& data_b,
+                            uint32_t&                          max_metric_id);
 
 };
 

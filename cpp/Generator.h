@@ -5,7 +5,7 @@
 #include <vector>
 #include <random>
 #include <complex>
-#include <stdint>
+#include <cstdint>
 
 class RandomGenerator
 {
@@ -33,8 +33,13 @@ void generateBits(std::vector<Data_t>& data_out, uint32_t size);
 // Generate AWGN
 //! [out] data_out  - Output generated AWGN
 //! [in]  size      - Size of the output data
-void generateAwgn(std::vector<complex<double>>& data_out, uint32_t size);
- 
+void generateAwgn(std::vector<std::complex<double>>& data_out, uint32_t size);
+
+// Add noise in data
+//! [in/out] data     - Input/Output data
+//! [in]     snr      - Signal to Noise Ratio
+void addNoise(std::vector<std::complex<double>>& data, double snr);
+
 };
 
 // Generate random bits
@@ -53,8 +58,23 @@ void RandomGenerator::generateBits(std::vector<Data_t>& data_out, uint32_t size)
     return;
 }
 
+class NoiseInjector
+{
+private:  // variables
+RandomGenerator gen;    //! Random Generator
+
+public:  // functions
+
+// Add noise in data
+//! [in/out] data     - Input/Output data
+//! [in]     snr      - Signal to Noise Ratio
+void addNoise(std::vector<std::complex<double>>& data, double snr);
+
+};
+
 class SignalGenerator
 {
+    
     public:
 
     // Function for generating shifted in TD signal
@@ -64,8 +84,8 @@ class SignalGenerator
     //! [in]  data_in          - Input data samples
     //! [out] data_out         - Output shifted signal
     static void generateShiftedSignal(double sample_freq, double d_t, uint32_t shifted_size,
-                                      const std::vector<complex<double>>& data_in,
-                                            std::vector<complex<double>>& data_out);
-}
+                                      const std::vector<std::complex<double>>& data_in,
+                                            std::vector<std::complex<double>>& data_out);
+};
 
 #endif //_GENERATOR_H_
