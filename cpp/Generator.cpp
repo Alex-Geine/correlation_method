@@ -1,5 +1,7 @@
 #include "Generator.h"
 
+constexpr double PI_2 = 6.28318530718;
+
 // Configure function
 //! [in] std  - Standart noise deviation
 //! [in] mean - Mean value 
@@ -50,8 +52,8 @@ void SignalGenerator::generateShiftedSignal(double sample_freq, double d_t, uint
                                  " Invalid shifted_size: " + std::to_string(shifted_size) +
                                  std::string("while size of data_in: ") + std::to_string(size));
 
-    // Calculating n_shift
-    uint32_t n_shift = d_t / sample_freq;
+    // Calculating n_shift  
+    uint32_t n_shift = d_t;// * sample_freq;
 
     std::cout << "n_shift: " << n_shift << std::endl;
 
@@ -102,3 +104,142 @@ void NoiseInjector::addNoise(std::vector<std::complex<double>>& data, double snr
 
     return;
 }
+
+//! Configurate signal generator
+//! [in] params - Configuration parameters
+void BaseGenerator::configure(const cfg& params)
+{
+    if (params.fd <= 0.)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters fd: ") +
+                                 std::to_string(params.fd));
+
+    if (params.f <= 0.)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters f: ") +
+                                 std::to_string(params.f));
+
+    if (params.n == 0)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters numBits: ") +
+                                 std::to_string(params.n));
+
+    if (params.vel <= 0.)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters infoVel: ") +
+                                 std::to_string(params.vel));
+
+    // Koef for normal trasmission (F_info / f << 1)
+    double koeff = 1. / params.vel / params.f;
+    std::cout << "config. koeff: " << koeff << std::endl;
+
+    if (koeff >= 0.1)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters infoVel. F_info / f_carrier =  ") +
+                                 std::to_string(koeff) + std::string(", (koeff << 1)"));
+    if (params.f * 2 > params.fd)
+        throw std::runtime_error("Error in BaseGenerator::configure function." + 
+                                 std::string(" Invalid parameters fd and f. fd >= 2 * f"));
+ 
+    m_NumBits = params.n;
+    m_Type    = params.type;
+    
+    // T = 1 / fd
+    // t = numBits * infoVel
+    // Num samples = t / T
+    m_NumSampl = params.n * params.vel * params.fd;
+    std::cout << "config. numSamples: " << m_NumSampl << std::endl;
+
+    // Num samples / numBits
+    m_SamplPerBit = params.vel  * params.fd;
+    std::cout << "config. Samples per bit: " << m_SamplPerBit << std::endl;
+
+    // T = 1 / fd
+    // phase = ph0 + f * t, where t = n * T
+    m_DPhase = params.f / params.fd;
+    std::cout << "config. d Phase: " << m_DPhase << std::endl;
+
+    // d_f = Fd / 2, whete Fd - Info freq
+    double fMin = 1. / 2. / params.vel;
+    std::cout << "d_f: " << fMin << std::endl;
+
+    // m_DPhaseFreqMod = {(params.f + fMin) / params.fd, (params.f - fMin) / params.fd};
+    m_DPhaseFreqMod = {(params.f * (1 + 0.5)) / params.fd, (params.f * (1 - 0.5)) / params.fd};
+
+    std::cout << "dPhaseMax: " << m_DPhaseFreqMod.first << "dPhaseMin: " << m_DPhaseFreqMod.second << std::endl;
+
+    return;
+};
+
+// Generate data signal
+//! [out] data_out - Generated sample data
+void BaseGenerator::generate(std::vector<std::complex<double>>& data_out)
+{
+    // Generate random bits
+    std::vector<uint8_t> info_bits;
+    m_Gen.generateBits(info_bits, m_NumBits);
+
+    // std::cout << "generate. Bits size: " << info_bits.size() << std::endl;
+    // for (auto&it:info_bits)
+    //     std::cout << (uint32_t)it << " ";
+    // std::cout << std::endl;
+
+    // Initial phase of the signal
+    double phase   = m_UniGen.generate() * PI_2;
+
+    // Pointer to current info bit val
+    auto   cur_bit = info_bits.begin();
+
+    data_out.clear();
+    data_out.resize(m_NumSampl);
+
+    double I = 0;
+    double Q = 0;
+
+    uint32_t incrementBits = 1;
+    if (m_Type == SignalType::phase)
+        incrementBits = 2;
+
+    for (uint32_t i = 0; i < m_NumSampl; ++i)
+    {
+        switch (m_Type)
+        {
+            case SignalType::amplitude: // AM
+                data_out[i] = {(1. + *cur_bit) * cos(phase), 0.};
+                phase += m_DPhase;
+                break;
+            case SignalType::phase: // BPSK
+                I = (*cur_bit ? 1 : -1) * cos(phase);
+                Q = (*(cur_bit + 1) ? 1 : -1) * sin(phase);
+                data_out[i] = I + Q;
+                phase += m_DPhase;
+                break;
+            case SignalType::freq: // MFM
+                data_out[i] = cos(phase);
+                phase += (*cur_bit ? m_DPhaseFreqMod.first : m_DPhaseFreqMod.second);
+                break;
+            default:
+                throw std::runtime_error("Error in modulation type! Type: " + std::to_string(static_cast<int>(m_Type)));
+        }
+
+        // Phase correction
+        if (phase > PI_2)
+            phase -= PI_2;
+
+        // We need to change bit val
+        if (!(i % m_SamplPerBit) && (i != 0))
+            cur_bit += incrementBits;
+    }
+
+    return;
+}
+
+// Configure Data Processor
+void DataProcessor::config(const cfg& params)
+{
+    
+    return;
+}
+
+// Run Data Processing
+void DataProcessor::run(double& persent, uint32_t num_runs = 1);

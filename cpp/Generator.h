@@ -7,6 +7,26 @@
 #include <complex>
 #include <cstdint>
 
+enum class SignalType : int
+{
+    ndf       = -1,  // Undefined
+    amplitude = 0, // AM
+    phase     = 1, // BPSK
+    freq      = 2  // MFM
+};
+
+struct cfg
+{
+    double   fd = 0;    // Sample freq
+    double   f  = 0;    // Carrier freq
+    uint32_t n = 0;   // Num info bits
+    double   vel = 0;   // Info velocity
+    double   dt = 0;    // Time offset
+    double   snr1 = 0;  // SNR for signal 1
+    double   snr2 = 0;    // SNR for signal 1
+    SignalType type = SignalType::ndf; // Type of modulation
+};
+
 class RandomGenerator
 {
 private: // variables
@@ -39,7 +59,23 @@ void generateAwgn(std::vector<std::complex<double>>& data_out, uint32_t size);
 //! [in/out] data     - Input/Output data
 //! [in]     snr      - Signal to Noise Ratio
 void addNoise(std::vector<std::complex<double>>& data, double snr);
+};
 
+class RandomUniformGen
+{
+    private:
+
+    std::mt19937                           gen  = {};
+    std::uniform_real_distribution<double> dist = {};
+
+    public:
+
+    //! Default constructor
+    RandomUniformGen() : gen(std::random_device{}()),
+                         dist(std::uniform_real_distribution<double>(0.0, 1.0)){};
+
+    //! Generate random number from 0 to 1
+    double generate() {return dist(gen);};
 };
 
 // Generate random bits
@@ -68,8 +104,40 @@ public:  // functions
 // Add noise in data
 //! [in/out] data     - Input/Output data
 //! [in]     snr      - Signal to Noise Ratio
-void addNoise(std::vector<std::complex<double>>& data, double snr);
+static void addNoise(std::vector<std::complex<double>>& data, double snr);
+};
 
+struct GeneratorCfg
+{
+    double          fd       = 0.;    //! Sample frequency
+    double          f        = 0.;    //! Carrier frequency
+    uint32_t        numBits  = 0;     //! Number of bits in the signal
+    double          infoVel  = 0.;    //! Information bits velocity
+};
+
+class BaseGenerator
+{
+    private: //! variables
+
+    RandomGenerator  m_Gen         = {};    //! Random generator to create random bits
+    RandomUniformGen m_UniGen      = {};    //! Random uniform generator to produce numbers from 0 to 1
+
+    uint32_t                  m_NumBits              = 0;               //! Number of info bits
+    uint32_t                  m_NumSampl             = 0;               //! Number of samples in output signal
+    uint32_t                  m_SamplPerBit          = 0;               //! Number samples per bit
+    double                    m_DPhase               = 0.;              //! Phase addition koeff
+    std::pair<double, double> m_DPhaseFreqMod        = {0,0};           //! Freq for Freq Modulation
+    SignalType                m_Type                 = SignalType::ndf; // Modulation type
+
+    public: //! fucntions
+
+    //! Configurate signal generator
+    //! [in] params - Configuration parameters
+    void configure(const cfg& params);
+
+    // Generate data signal
+    //! [out] data_out - Generated sample data
+    void generate(std::vector<std::complex<double>>& data_out);
 };
 
 class SignalGenerator
@@ -86,6 +154,22 @@ class SignalGenerator
     static void generateShiftedSignal(double sample_freq, double d_t, uint32_t shifted_size,
                                       const std::vector<std::complex<double>>& data_in,
                                             std::vector<std::complex<double>>& data_out);
+};
+
+class DataProcessor
+{
+    private:
+
+    BaseGenerator m_GenData;   // Generator of data
+    NoiseInjector m_Noise;     // Noise injector
+
+    public: // functions
+
+    // Configure Data Processor
+    void config(const cfg& params);
+
+    // Run Data Processing
+    void run(double& persent, uint32_t num_runs = 1);
 };
 
 #endif //_GENERATOR_H_

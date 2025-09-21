@@ -1,8 +1,10 @@
 #include <iostream>
+#include <fstream>
+#include <string>
 
 #include "Generator.h"
 #include "Correlator.h"
-#include <fstream>
+
 
 template <typename T>
 static void print(std::vector<T> data, std::string name)
@@ -28,39 +30,59 @@ static void write(std::vector<T> data, std::string name)
     outFile << data[data.size() - 1] << std::endl;
 }
 
-int main()
+void parceCfg(cfg& cfg, char* argv[])
 {
-    RandomGenerator gen;
+    cfg.fd   = std::stod(argv[1]);
+    cfg.f    = std::stod(argv[2]);
+    cfg.n    = std::stoi(argv[3]);
+    cfg.vel  = std::stod(argv[4]);
+    cfg.dt   = std::stod(argv[5]);
+    cfg.snr1 = std::stod(argv[6]);
+    cfg.snr2 = std::stod(argv[7]);
+    cfg.type = static_cast<SignalType>(std::stoi(argv[8]));
+}
+
+int main(int argc, char* argv[])
+{
+    std::cout << "argc: " << argc << std::endl;
+    std::cout << " argv" << std::endl;
+    for (int i = 0; i < argc; ++i)
+        std::cout << argv[i] << std::endl;
+
+    if (argc != 9)
+    {
+        std::cerr << "Incorrect input number of parameters: " << argc << std::endl;
+        abort();
+    }
+
+    cfg config;
+    parceCfg(config, argv);
+
+    BaseGenerator gen;
     NoiseInjector noiseInjector;
-    gen.config();
 
     std::vector<std::complex<double>> firstSignal;
     std::vector<std::complex<double>> secondSignal;
     std::vector<double>               correlation;
 
-    // 1 sample - 1 second
-    uint32_t size         = 100;
-    double   fd           = 1;
-    double   d_t          = 30;
-    double   snr_static   = 10; // 10 dB
-    double   snr_variable = 0; // 10 dB
-    uint32_t shifted_size = 30;
+    double   d_t              = config.dt;
+    double   snr_static       = config.snr1; // 10 dB
+    double   snr_variable     = config.snr2; // 10 dB
+    double shifted_size_per   = 0.3; // 30 %
 
     uint32_t max_metric_id = 0;
 
-    // Generate first sample
-    gen.generateAwgn(firstSignal, size);
+    gen.configure(config);
 
-    SignalGenerator::generateShiftedSignal(fd, d_t, shifted_size, firstSignal, secondSignal);
+    // Generate first sample
+    gen.generate(firstSignal);
+
+    SignalGenerator::generateShiftedSignal(config.fd, d_t, shifted_size_per * firstSignal.size(), firstSignal, secondSignal);
 
     noiseInjector.addNoise(firstSignal, snr_variable);
     noiseInjector.addNoise(secondSignal, snr_static);
 
     Correlator::correlate(firstSignal, secondSignal, correlation, max_metric_id);
-
-    print(firstSignal, std::string("first_data"));
-    print(secondSignal, std::string("second_data"));
-    print(correlation, std::string("correlation"));
 
     write(firstSignal, std::string("../data/first_data.txt"));
     write(secondSignal, std::string("../data/second_data.txt"));
