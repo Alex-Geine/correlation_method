@@ -38,7 +38,7 @@ std::normal_distribution<double>  dist{};   // Normal distribution
 public: // functions
 
 // Default constructor
-RandomGenerator(){};
+RandomGenerator() : gen(std::random_device{}()) {}
 
 // Configure function
 //! [in] std  - Standart noise deviation

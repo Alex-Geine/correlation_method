@@ -3,8 +3,18 @@
 #include <algorithm>
 #include <numeric>
 
-// В .cpp файле:
 std::mutex Correlator::fftwMutex;
+
+// Destructor
+Correlator::~Correlator()
+{
+    if (plan_forward_a)
+        fftw_destroy_plan(plan_forward_a);
+    if (plan_forward_b)
+        fftw_destroy_plan(plan_forward_b);
+    if (plan_backward)
+        fftw_destroy_plan(plan_backward);
+}
 
 // Calculate correlation
 //! [in]  data_a        - First signal to correlate
@@ -18,7 +28,7 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
     uint32_t size_b = data_b.size();
     size_t size_out = size_a + size_b - 1;
 
-    if (corr_out.empty())
+    if (init)
         corr_out.resize(size_out);
 
     std::complex<double> mean_a = std::accumulate(
@@ -27,8 +37,11 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
     std::complex<double> mean_b = std::accumulate(
         data_b.begin(), data_b.end(), std::complex<double>(0, 0)) / static_cast<double>(size_b);
 
-    std::vector<std::complex<double>> a_centered(size_a);
-    std::vector<std::complex<double>> b_centered(size_b);
+    if (init)
+    {
+        a_centered.resize(size_a);
+        b_centered.resize(size_b);
+    }
     
     for (uint32_t i = 0; i < size_a; ++i)
         a_centered[i] = data_a[i] - mean_a;
@@ -49,36 +62,45 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
     if (normalizer < 1e-12)
         normalizer = 1e-12;
 
-    uint32_t n_fft = 1;
-    while (n_fft < size_out)
-        n_fft <<= 1;
+    if (init)
+    {
+        while (n_fft < size_out)
+            n_fft <<= 1;
+        a_fft.resize(n_fft);
+        b_fft.resize(n_fft);
+        corr_fft.resize(n_fft);
+    }
 
-    std::vector<std::complex<double>> a_fft(n_fft, 0.0);
-    std::vector<std::complex<double>> b_fft(n_fft, 0.0);
-    std::vector<std::complex<double>> corr_fft(n_fft);
+    std::fill(a_fft.begin(), a_fft.end(), std::complex<double>{0,0});
+    std::fill(b_fft.begin(), b_fft.end(), std::complex<double>{0,0});
+    std::fill(corr_fft.begin(), corr_fft.end(), std::complex<double>{0,0});
 
     std::copy(a_centered.begin(), a_centered.end(), a_fft.begin());
     std::copy(b_centered.begin(), b_centered.end(), b_fft.begin());
 
     std::lock_guard<std::mutex> lock(fftwMutex);
 
-    fftw_plan plan_forward_a = fftw_plan_dft_1d(n_fft,
-                                                reinterpret_cast<fftw_complex*>(a_fft.data()),
-                                                reinterpret_cast<fftw_complex*>(a_fft.data()),
-                                                FFTW_FORWARD,
-                                                FFTW_ESTIMATE);
+    if (init)
+    {
+        plan_forward_a = fftw_plan_dft_1d(n_fft,
+                                          reinterpret_cast<fftw_complex*>(a_fft.data()),
+                                          reinterpret_cast<fftw_complex*>(a_fft.data()),
+                                          FFTW_FORWARD,
+                                          FFTW_ESTIMATE);
                                                 
-    fftw_plan plan_forward_b = fftw_plan_dft_1d(n_fft,
-                                                reinterpret_cast<fftw_complex*>(b_fft.data()),
-                                                reinterpret_cast<fftw_complex*>(b_fft.data()),
-                                                FFTW_FORWARD,
-                                                FFTW_ESTIMATE);
+        plan_forward_b = fftw_plan_dft_1d(n_fft,
+                                          reinterpret_cast<fftw_complex*>(b_fft.data()),
+                                          reinterpret_cast<fftw_complex*>(b_fft.data()),
+                                          FFTW_FORWARD,
+                                          FFTW_ESTIMATE);
                                                 
-    fftw_plan plan_backward = fftw_plan_dft_1d(n_fft,
-                                               reinterpret_cast<fftw_complex*>(corr_fft.data()),
-                                               reinterpret_cast<fftw_complex*>(corr_fft.data()),
-                                               FFTW_BACKWARD,
-                                               FFTW_ESTIMATE);
+        plan_backward = fftw_plan_dft_1d(n_fft,
+                                         reinterpret_cast<fftw_complex*>(corr_fft.data()),
+                                         reinterpret_cast<fftw_complex*>(corr_fft.data()),
+                                         FFTW_BACKWARD,
+                                         FFTW_ESTIMATE);
+        init = false;
+    }
 
     fftw_execute(plan_forward_a);
     fftw_execute(plan_forward_b);
@@ -90,10 +112,6 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
 
     for (uint32_t i = 0; i < size_out; ++i)
         corr_out[i] = std::abs(corr_fft[i]) / (n_fft * normalizer);
-
-    fftw_destroy_plan(plan_forward_a);
-    fftw_destroy_plan(plan_forward_b);
-    fftw_destroy_plan(plan_backward);
 
     return;
 }

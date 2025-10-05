@@ -53,8 +53,6 @@ void writeBer(double val, std::string name)
 //! [in] mean - Mean value 
 void RandomGenerator::config(double std, double mean)
 {
-    // Update generator
-    gen = std::mt19937(std::random_device{}());
     dist = std::normal_distribution<double>(mean, std);
 }
 
@@ -407,8 +405,6 @@ void DataProcessor::run()
 
     Correlator corr;
     corr.correlate(firstSignal, secondSignal, correlation, max_metric_id);
-
-    std::cout << "shift: " << m_Cfg.dt << ", detected_shift: " << max_metric_id << std::endl;
     
     Utils::write(firstSignal, std::string("../data/first_data.txt"));
     Utils::write(secondSignal, std::string("../data/second_data.txt"));

@@ -13,7 +13,16 @@ class Correlator
 private: // variables
 
     static std::mutex fftwMutex;  // Общий мьютекс для всех FFTW операций
-
+    std::vector<std::complex<double>> a_centered;
+    std::vector<std::complex<double>> b_centered;
+    std::vector<std::complex<double>> a_fft;
+    std::vector<std::complex<double>> b_fft;
+    std::vector<std::complex<double>> corr_fft;
+    fftw_plan plan_forward_a;
+    fftw_plan plan_forward_b;
+    fftw_plan plan_backward;
+    bool init = true;
+    uint32_t n_fft = 1;
 private: // functions
 
 // Calculate correlation
@@ -26,6 +35,9 @@ void findCorrelation(const std::vector<std::complex<double>>& data_a,
 
 
 public: // functions
+
+// Destructor
+~Correlator();
 
 // Process correlation with ouput data
 //! [in]  data_a        - First signal to correlate
