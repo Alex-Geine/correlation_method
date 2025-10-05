@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <numeric>
-#include <fftw3.h>
+
+// В .cpp файле:
+std::mutex Correlator::fftwMutex;
 
 // Calculate correlation
 //! [in]  data_a        - First signal to correlate
@@ -12,51 +14,41 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
                                  const std::vector<std::complex<double>>& data_b,
                                  std::vector<double>&                     corr_out)
 {
-    // NCC(k) = sum( [x(n) - mean(x)] * [y(n+k) - mean(y)] ) / ( std(x) * std(y) )
-
     uint32_t size_a = data_a.size();
     uint32_t size_b = data_b.size();
-    uint32_t size_out = size_a - size_b;
+    size_t size_out = size_a + size_b - 1;
 
-    corr_out.clear();
-    corr_out.resize(size_out);
+    if (corr_out.empty())
+        corr_out.resize(size_out);
 
-   // 1. Вычисляем средние значения
     std::complex<double> mean_a = std::accumulate(
         data_a.begin(), data_a.end(), std::complex<double>(0, 0)) / static_cast<double>(size_a);
     
     std::complex<double> mean_b = std::accumulate(
         data_b.begin(), data_b.end(), std::complex<double>(0, 0)) / static_cast<double>(size_b);
 
-    // 2. Создаем копии сигналов с вычитанием среднего
     std::vector<std::complex<double>> a_centered(size_a);
     std::vector<std::complex<double>> b_centered(size_b);
     
-    for (uint32_t i = 0; i < size_a; ++i) {
+    for (uint32_t i = 0; i < size_a; ++i)
         a_centered[i] = data_a[i] - mean_a;
-    }
     
-    for (uint32_t i = 0; i < size_b; ++i) {
+    for (uint32_t i = 0; i < size_b; ++i)
         b_centered[i] = data_b[i] - mean_b;
-    }
 
-    // 3. Вычисляем энергии сигналов для нормализации
     double energy_a = 0.0;
     double energy_b = 0.0;
     
-    for (const auto& val : a_centered) {
-        energy_a += std::norm(val); // |x|² = x_real² + x_imag²
-    }
+    for (const auto& val : a_centered)
+        energy_a += std::norm(val);
     
-    for (const auto& val : b_centered) {
+    for (const auto& val : b_centered)
         energy_b += std::norm(val);
-    }
     
     double normalizer = std::sqrt(energy_a * energy_b);
-    if (normalizer < 1e-12) {
-        normalizer = 1e-12; // Защита от деления на ноль
-    }
-    // For FFT
+    if (normalizer < 1e-12)
+        normalizer = 1e-12;
+
     uint32_t n_fft = 1;
     while (n_fft < size_out)
         n_fft <<= 1;
@@ -67,6 +59,8 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
 
     std::copy(a_centered.begin(), a_centered.end(), a_fft.begin());
     std::copy(b_centered.begin(), b_centered.end(), b_fft.begin());
+
+    std::lock_guard<std::mutex> lock(fftwMutex);
 
     fftw_plan plan_forward_a = fftw_plan_dft_1d(n_fft,
                                                 reinterpret_cast<fftw_complex*>(a_fft.data()),
@@ -92,35 +86,11 @@ void Correlator::findCorrelation(const std::vector<std::complex<double>>& data_a
     for (uint32_t i = 0; i < n_fft; ++i)
         corr_fft[i] = a_fft[i] * std::conj(b_fft[i]);
 
-    // Обратное FFT
     fftw_execute(plan_backward);
 
-    // После получения сырой корреляции через FFT
-for (uint32_t lag = 0; lag < size_out; ++lag) {
-    // Для каждого лага вычисляем локальную энергию
-    uint32_t start = std::max(0, static_cast<int>(lag) - static_cast<int>(size_b) + 1);
-    uint32_t end = std::min(size_a, lag + 1);
-    
-    double local_energy = 0.0;
-    for (uint32_t i = start; i < end; ++i) {
-        uint32_t j = lag - i;
-        if (j < size_b) {
-            local_energy += std::norm(a_centered[i]) * std::norm(b_centered[j]);
-        }
-    }
-    
-    double local_normalizer = std::sqrt(local_energy);
-    if (local_normalizer > 1e-12) {
-        corr_out[lag] = std::abs(corr_fft[lag]) / (n_fft * local_normalizer);
-    } else {
-        corr_out[lag] = 0.0;
-    }
-}
+    for (uint32_t i = 0; i < size_out; ++i)
+        corr_out[i] = std::abs(corr_fft[i]) / (n_fft * normalizer);
 
-    // for (uint32_t i = 0; i < size_out; ++i)
-        // corr_out[i] = std::abs(corr_fft[i] / normalizer) / size_out;
-
-    // Очистка ресурсов FFTW
     fftw_destroy_plan(plan_forward_a);
     fftw_destroy_plan(plan_forward_b);
     fftw_destroy_plan(plan_backward);
@@ -144,11 +114,11 @@ void Correlator::correlate(const std::vector<std::complex<double>>& data_a,
     findCorrelation(data_a, data_b, corr_out);
 
     // Находим итератор на максимальный элемент
-    auto max_it = std::max_element(corr_out.begin(), corr_out.end());
+    int peak_index = std::max_element(corr_out.begin(), corr_out.end()) - corr_out.begin();
     
-    std::cout << "max el: " << *max_it << std::endl;
+    std::cout << "max el: " << corr_out[peak_index] << std::endl;
     // Вычисляем индекс
-    max_metric_id = std::distance(corr_out.begin(), max_it);
+    max_metric_id = peak_index;// - (data_b.size() - 1);
 
     return;
 }
@@ -169,10 +139,11 @@ void Correlator::correlate(const std::vector<std::complex<double>>& data_a,
     findCorrelation(data_a, data_b, corr_out);
 
     // Находим итератор на максимальный элемент
-    auto max_it = std::max_element(corr_out.begin(), corr_out.end());
+    int peak_index = std::max_element(corr_out.begin(), corr_out.end()) - corr_out.begin();
+
     
     // Вычисляем индекс
-    max_metric_id = std::distance(corr_out.begin(), max_it);
+    max_metric_id = peak_index;// - (data_b.size() - 1);
 
     return;
 }

@@ -8,7 +8,7 @@ constexpr double PI_2 = 6.28318530718;
 namespace Utils
 {
 template <typename T>
-static void print(std::vector<T> data, std::string name)
+void print(std::vector<T> data, std::string name)
 {
     std::cout << name << ", size: " << data.size() << std::endl;
     for (auto& it: data)
@@ -17,7 +17,7 @@ static void print(std::vector<T> data, std::string name)
 }
 
 template <typename T>
-static void write(std::vector<T> data, std::string name)
+void write(std::vector<T> data, std::string name)
 {
     std::ofstream outFile;
     outFile.open(name);
@@ -29,7 +29,23 @@ static void write(std::vector<T> data, std::string name)
        outFile << data[i] << ", ";
 
     outFile << data[data.size() - 1] << std::endl;
+
+    outFile.close();
 }
+
+void writeBer(double val, std::string name)
+{
+    std::ofstream outFile;
+    outFile.open(name, std::ios::app);
+
+    if (!outFile.is_open())
+        throw std::runtime_error("Cannot open file: " + name);
+
+    outFile << val << "\n";
+
+    outFile.close();
+}
+
 }; // Utils
 
 // Configure function
@@ -94,8 +110,8 @@ void SignalGenerator::generateShiftedSignal(double sample_freq, double d_t, uint
                                  std::to_string(size) + std::string(", fd: ") + std::to_string(sample_freq) +
                                  std::string(", d_t: ") + std::to_string(d_t));
 
-    data_out.clear();
-    data_out.resize(shifted_size);
+    if (data_out.empty())
+        data_out.resize(shifted_size);
 
     auto iter_data_in = data_in.begin() + n_shift;
 
@@ -137,8 +153,8 @@ double SignalGenerator::generateShiftedSignal(double sample_freq, uint32_t shift
                                  std::to_string(size) + std::string(", fd: ") + std::to_string(sample_freq) +
                                  std::string(", d_t: ") + std::to_string(dt));
 
-    data_out.clear();
-    data_out.resize(shifted_size);
+    if (data_out.empty())
+        data_out.resize(shifted_size);
 
     auto iter_data_in = data_in.begin() + n_shift;
 
@@ -251,19 +267,14 @@ void BaseGenerator::generate(std::vector<std::complex<double>>& data_out)
     std::vector<uint8_t> info_bits;
     m_Gen.generateBits(info_bits, m_NumBits);
 
-    // std::cout << "generate. Bits size: " << info_bits.size() << std::endl;
-    // for (auto&it:info_bits)
-    //     std::cout << (uint32_t)it << " ";
-    // std::cout << std::endl;
-
     // Initial phase of the signal
     double phase   = m_UniGen.generate() * PI_2;
 
     // Pointer to current info bit val
     auto   cur_bit = info_bits.begin();
 
-    data_out.clear();
-    data_out.resize(m_NumSampl);
+    if (data_out.empty())
+        data_out.resize(m_NumSampl);
 
     double I = 0;
     double Q = 0;
@@ -318,6 +329,15 @@ void DataProcessor::config(const cfg& params)
     m_Cfg = params;
     m_GenData.configure(params);
 
+    if (params.type == SignalType::amplitude)
+        fileName = "../data/ber_am.txt";
+    else if (params.type == SignalType::phase)
+        fileName = "../data/ber_pm.txt";
+    else if (params.type == SignalType::freq)
+        fileName = "../data/ber_fm.txt";
+    else
+        throw std::runtime_error("Error in DataProcessor::config! Signal type is ndf!");
+
     return;
 }
 
@@ -325,6 +345,7 @@ void DataProcessor::config(const cfg& params)
 void DataProcessor::run(uint32_t num_runs)
 {
     size_t counter = 0;
+    Correlator corr;
 
     // Temp data for processing
     std::vector<std::complex<double>> firstSignal;
@@ -351,13 +372,15 @@ void DataProcessor::run(uint32_t num_runs)
         m_Noise.addNoise(firstSignal,  m_Cfg.snr1);
         m_Noise.addNoise(secondSignal, m_Cfg.snr2);
 
-        Correlator::correlate(firstSignal, secondSignal, correlation, max_metric_id);
+        corr.correlate(firstSignal, secondSignal, correlation, max_metric_id);
 
         if (std::abs(max_metric_id - dt) < m_GenData.getNumSamplesPerBit())
             counter++;
     }
 
     persent = (double)counter / (double)num_runs;
+
+    Utils::writeBer(persent, fileName);
 
     return;
 }
@@ -382,7 +405,8 @@ void DataProcessor::run()
     m_Noise.addNoise(firstSignal,  m_Cfg.snr1);
     m_Noise.addNoise(secondSignal, m_Cfg.snr2);
 
-    Correlator::correlate(firstSignal, secondSignal, correlation, max_metric_id);
+    Correlator corr;
+    corr.correlate(firstSignal, secondSignal, correlation, max_metric_id);
 
     std::cout << "shift: " << m_Cfg.dt << ", detected_shift: " << max_metric_id << std::endl;
     

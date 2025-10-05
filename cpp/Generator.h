@@ -182,6 +182,8 @@ class DataProcessor
     cfg              m_Cfg;       // Configuration params
     RandomUniformGen m_UniGen;    // Random uniform Generator
 
+    std::string fileName;         // Filename to write ber data
+
     public: // functions
 
     // Configure Data Processor
