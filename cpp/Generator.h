@@ -17,14 +17,15 @@ enum class SignalType : int
 
 struct cfg
 {
-    double   fd = 0;    // Sample freq
-    double   f  = 0;    // Carrier freq
-    uint32_t n = 0;   // Num info bits
-    double   vel = 0;   // Info velocity
-    double   dt = 0;    // Time offset
-    double   snr1 = 0;  // SNR for signal 1
+    double   fd = 0;      // Sample freq
+    double   f  = 0;      // Carrier freq
+    uint32_t n = 0;       // Num info bits
+    double   vel = 0;     // Info velocity
+    double   dt = 0;      // Time offset
+    double   snr1 = 0;    // SNR for signal 1
     double   snr2 = 0;    // SNR for signal 1
-    SignalType type = SignalType::ndf; // Type of modulation
+    SignalType type       = SignalType::ndf; // Type of modulation
+    bool     is_random_dt = false;
 };
 
 class RandomGenerator
@@ -104,7 +105,7 @@ public:  // functions
 // Add noise in data
 //! [in/out] data     - Input/Output data
 //! [in]     snr      - Signal to Noise Ratio
-static void addNoise(std::vector<std::complex<double>>& data, double snr);
+void addNoise(std::vector<std::complex<double>>& data, double snr);
 };
 
 struct GeneratorCfg
@@ -138,6 +139,9 @@ class BaseGenerator
     // Generate data signal
     //! [out] data_out - Generated sample data
     void generate(std::vector<std::complex<double>>& data_out);
+
+    // Get number of samples per bit
+    uint32_t getNumSamplesPerBit();
 };
 
 class SignalGenerator
@@ -154,14 +158,29 @@ class SignalGenerator
     static void generateShiftedSignal(double sample_freq, double d_t, uint32_t shifted_size,
                                       const std::vector<std::complex<double>>& data_in,
                                             std::vector<std::complex<double>>& data_out);
+
+    // Function for generating shifted in TD signal
+    //! [in]  sample_freq      - Sample frequency of the signal
+    //! [in]  d_t              - Time offset in sec
+    //! [in]  shifted_size     - Size of shifted signal
+    //! [in]  data_in          - Input data samples
+    //! [out] data_out         - Output shifted signal
+    //! [return] generated dt
+    static double generateShiftedSignal(double sample_freq, uint32_t shifted_size,
+                                          const std::vector<std::complex<double>>& data_in,
+                                          double seed,
+                                                std::vector<std::complex<double>>& data_out);
+
 };
 
 class DataProcessor
 {
     private:
 
-    BaseGenerator m_GenData;   // Generator of data
-    NoiseInjector m_Noise;     // Noise injector
+    BaseGenerator    m_GenData;   // Generator of data
+    NoiseInjector    m_Noise;     // Noise injector
+    cfg              m_Cfg;       // Configuration params
+    RandomUniformGen m_UniGen;    // Random uniform Generator
 
     public: // functions
 
@@ -169,7 +188,10 @@ class DataProcessor
     void config(const cfg& params);
 
     // Run Data Processing
-    void run(double& persent, uint32_t num_runs = 1);
+    void run(uint32_t num_runs);
+
+    // Run Data Processing with writing temp data 
+    void run();
 };
 
 #endif //_GENERATOR_H_

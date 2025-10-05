@@ -1,6 +1,36 @@
 #include "Generator.h"
+#include "Correlator.h"
+#include <fstream>
+#include <string>
 
 constexpr double PI_2 = 6.28318530718;
+
+namespace Utils
+{
+template <typename T>
+static void print(std::vector<T> data, std::string name)
+{
+    std::cout << name << ", size: " << data.size() << std::endl;
+    for (auto& it: data)
+        std::cout << it << " ";
+    std::cout << std::endl;
+}
+
+template <typename T>
+static void write(std::vector<T> data, std::string name)
+{
+    std::ofstream outFile;
+    outFile.open(name);
+
+    if (!outFile.is_open())
+        throw std::runtime_error("Cannot open file: " + name);
+
+    for (uint32_t i = 0; i < data.size() - 1; ++i)
+       outFile << data[i] << ", ";
+
+    outFile << data[data.size() - 1] << std::endl;
+}
+}; // Utils
 
 // Configure function
 //! [in] std  - Standart noise deviation
@@ -74,6 +104,50 @@ void SignalGenerator::generateShiftedSignal(double sample_freq, double d_t, uint
     return;
 }
 
+// Function for generating shifted in TD signal
+double SignalGenerator::generateShiftedSignal(double sample_freq, uint32_t shifted_size,
+                             const std::vector<std::complex<double>>& data_in,
+                             double seed,
+                             std::vector<std::complex<double>>& data_out)
+{
+    double dt = 0;
+
+    if (sample_freq <= 0)
+        throw std::runtime_error("Error in SignalGenerator::generateShiftedSignal."
+                                 " Invalid sample_freq: " + std::to_string(sample_freq));
+
+    uint32_t size = data_in.size();
+
+    if (size < shifted_size)
+        throw std::runtime_error("Error in SignalGenerator::generateShiftedSignal."
+                                 " Invalid shifted_size: " + std::to_string(shifted_size) +
+                                 std::string("while size of data_in: ") + std::to_string(size));
+
+    dt = (size - shifted_size) * seed;
+
+    // Calculating n_shift  
+    uint32_t n_shift = dt;// * sample_freq;
+
+    std::cout << "n_shift: " << n_shift << std::endl;
+
+    if (n_shift + shifted_size > size)
+        throw std::runtime_error("Error in SignalGenerator::generateShiftedSignal." +
+                                 std::string(" Invalid n_shift: ") + std::to_string(n_shift) +
+                                 std::string(", n_shift is size / fd / d_t, where size: ") +
+                                 std::to_string(size) + std::string(", fd: ") + std::to_string(sample_freq) +
+                                 std::string(", d_t: ") + std::to_string(dt));
+
+    data_out.clear();
+    data_out.resize(shifted_size);
+
+    auto iter_data_in = data_in.begin() + n_shift;
+
+    std::copy(iter_data_in, iter_data_in + shifted_size, data_out.begin());
+
+    return dt;
+}
+
+
 // Add noise in data
 //! [in/out] data     - Input/Output data
 //! [in]     snr      - Signal to Noise Ratio
@@ -92,7 +166,7 @@ void NoiseInjector::addNoise(std::vector<std::complex<double>>& data, double snr
 
     // need to process mean energy
     // Very big questions
-    NoiseInjector::gen.config(std::sqrt(noise_power / 2.));
+    gen.config(std::sqrt(noise_power / 2.));
 
     uint32_t size = data.size();
 
@@ -166,8 +240,6 @@ void BaseGenerator::configure(const cfg& params)
     // m_DPhaseFreqMod = {(params.f + fMin) / params.fd, (params.f - fMin) / params.fd};
     m_DPhaseFreqMod = {(params.f * (1 + 0.5)) / params.fd, (params.f * (1 - 0.5)) / params.fd};
 
-    std::cout << "dPhaseMax: " << m_DPhaseFreqMod.first << "dPhaseMin: " << m_DPhaseFreqMod.second << std::endl;
-
     return;
 };
 
@@ -234,12 +306,89 @@ void BaseGenerator::generate(std::vector<std::complex<double>>& data_out)
     return;
 }
 
+// Get number of samples per bit
+uint32_t BaseGenerator::getNumSamplesPerBit()
+{
+    return m_SamplPerBit;
+}
+
 // Configure Data Processor
 void DataProcessor::config(const cfg& params)
 {
-    
+    m_Cfg = params;
+    m_GenData.configure(params);
+
     return;
 }
 
 // Run Data Processing
-void DataProcessor::run(double& persent, uint32_t num_runs = 1);
+void DataProcessor::run(uint32_t num_runs)
+{
+    size_t counter = 0;
+
+    // Temp data for processing
+    std::vector<std::complex<double>> firstSignal;
+    std::vector<std::complex<double>> secondSignal;
+    std::vector<double>               correlation;
+    double   shifted_size_per    = 0.3; // 30 %
+    uint32_t max_metric_id       = 0;
+    uint32_t shifted_signal_size = 0;
+    double persent = 0;
+
+    double dt = 0;
+
+    // Processing steps
+    for (uint32_t i = 0; i < num_runs; ++i)
+    {
+        // Generate large part
+        m_GenData.generate(firstSignal);
+
+        shifted_signal_size = shifted_size_per * firstSignal.size();
+
+        // Generate min part
+        dt = SignalGenerator::generateShiftedSignal(m_Cfg.fd, shifted_signal_size, firstSignal, m_UniGen.generate(), secondSignal);
+
+        m_Noise.addNoise(firstSignal,  m_Cfg.snr1);
+        m_Noise.addNoise(secondSignal, m_Cfg.snr2);
+
+        Correlator::correlate(firstSignal, secondSignal, correlation, max_metric_id);
+
+        if (std::abs(max_metric_id - dt) < m_GenData.getNumSamplesPerBit())
+            counter++;
+    }
+
+    persent = (double)counter / (double)num_runs;
+
+    return;
+}
+
+// Run Data Processing with writing temp data 
+void DataProcessor::run()
+{
+    std::vector<std::complex<double>> firstSignal;
+    std::vector<std::complex<double>> secondSignal;
+    std::vector<double>               correlation;
+    double   shifted_size_per   = 0.3; // 30 %
+    uint32_t max_metric_id = 0;
+
+    // Generate large part
+    m_GenData.generate(firstSignal);
+
+    uint32_t shifted_signal_size = shifted_size_per * firstSignal.size();
+
+    // Generate min part
+    SignalGenerator::generateShiftedSignal(m_Cfg.fd, m_Cfg.dt, shifted_signal_size, firstSignal, secondSignal);
+
+    m_Noise.addNoise(firstSignal,  m_Cfg.snr1);
+    m_Noise.addNoise(secondSignal, m_Cfg.snr2);
+
+    Correlator::correlate(firstSignal, secondSignal, correlation, max_metric_id);
+
+    std::cout << "shift: " << m_Cfg.dt << ", detected_shift: " << max_metric_id << std::endl;
+    
+    Utils::write(firstSignal, std::string("../data/first_data.txt"));
+    Utils::write(secondSignal, std::string("../data/second_data.txt"));
+    Utils::write(correlation, std::string("../data/correlation.txt"));
+
+    return;
+}
