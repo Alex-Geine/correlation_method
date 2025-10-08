@@ -278,8 +278,6 @@ void BaseGenerator::generate(std::vector<std::complex<double>>& data_out)
     double Q = 0;
 
     uint32_t incrementBits = 1;
-    if (m_Type == SignalType::phase)
-        incrementBits = 2;
 
     for (uint32_t i = 0; i < m_NumSampl; ++i)
     {
@@ -287,12 +285,12 @@ void BaseGenerator::generate(std::vector<std::complex<double>>& data_out)
         {
             case SignalType::amplitude: // AM
                 data_out[i] = {(1. + *cur_bit) * cos(phase), 0.};
+                // data_out[i] = {(*cur_bit ? 1. : -1.) * cos(phase), 0.};
                 phase += m_DPhase;
                 break;
             case SignalType::phase: // BPSK
                 I = (*cur_bit ? 1 : -1) * cos(phase);
-                Q = (*(cur_bit + 1) ? 1 : -1) * sin(phase);
-                data_out[i] = I + Q;
+                data_out[i] = I ;
                 phase += m_DPhase;
                 break;
             case SignalType::freq: // MFM
@@ -349,7 +347,7 @@ void DataProcessor::run(uint32_t num_runs)
     std::vector<std::complex<double>> firstSignal;
     std::vector<std::complex<double>> secondSignal;
     std::vector<double>               correlation;
-    double   shifted_size_per    = 0.3; // 30 %
+    double   shifted_size_per    = m_Cfg.size_per / 100.;
     uint32_t max_metric_id       = 0;
     uint32_t shifted_signal_size = 0;
     double persent = 0;
@@ -389,13 +387,13 @@ void DataProcessor::run()
     std::vector<std::complex<double>> firstSignal;
     std::vector<std::complex<double>> secondSignal;
     std::vector<double>               correlation;
-    double   shifted_size_per   = 0.3; // 30 %
+    // double   shifted_size_per   = 0.3; // 30 %
     uint32_t max_metric_id = 0;
 
     // Generate large part
     m_GenData.generate(firstSignal);
 
-    uint32_t shifted_signal_size = shifted_size_per * firstSignal.size();
+    uint32_t shifted_signal_size = m_Cfg.size_per / 100. * firstSignal.size();
 
     // Generate min part
     SignalGenerator::generateShiftedSignal(m_Cfg.fd, m_Cfg.dt, shifted_signal_size, firstSignal, secondSignal);

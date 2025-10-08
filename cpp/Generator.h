@@ -26,6 +26,7 @@ struct cfg
     double   snr2 = 0;    // SNR for signal 1
     SignalType type       = SignalType::ndf; // Type of modulation
     bool     is_random_dt = false;
+    double   size_per = 0.;  // Size of the expected to find signal
 };
 
 class RandomGenerator

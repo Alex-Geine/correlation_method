@@ -28,16 +28,17 @@ class SignalAnalyzerApp:
         
         # Параметры по умолчанию для демо режима
         self.demo_params = {
-            "fd": 20.0,    # Sample freq
-            "f": 10.0,     # Carrier freq
-            "n": 10,       # Num info bits
-            "vel": 10.0,   # Info velocity
-            "dt": 0.0,     # Time offset
-            "snr1": 10.0,  # SNR for signal 1
-            "snr2": 10.0,  # SNR for signal 2
-            "type": 0      # modulation type 
+            "fd": 20.0,      # Sample freq
+            "f": 10.0,       # Carrier freq
+            "n": 100,         # Num info bits
+            "vel": 10.0,     # Info velocity
+            "dt":  10.0,       # Time offset
+            "snr1": 10.0,    # SNR for signal 1
+            "snr2": 10.0,    # SNR for signal 2
+            "type": 0,       # Modulation type 
+            "sigSize": 30.0  # Signal size in persents
         }
-        
+
         # Параметры по умолчанию для режима исследования
         self.research_params = {
             "fd": 20.0,        # Sample freq
@@ -48,7 +49,8 @@ class SignalAnalyzerApp:
             "snr_min": 0.0,    # Минимальное SNR для BER
             "snr_max": 20.0,   # Максимальное SNR для BER
             "n_points": 10,    # Количество точек на графике
-            "n_runs": 100      # Количество испытаний на точку
+            "n_runs": 100,      # Количество испытаний на точку
+            "sigSize": 30.0    # Signal size in persents
         }
         
         self.root.geometry(self.main_window_size)
@@ -92,16 +94,17 @@ class SignalAnalyzerApp:
         
         # Создаем поля для параметров демо режима
         demo_param_labels = {
-            "fd": "Частота дискретизации (fd):",
-            "f": "Несущая частота (f):",
-            "n": "Количество бит информации (n):",
-            "vel": "Скорость информации (vel):",
-            "dt": "Временное смещение (dt):",
-            "snr1": "SNR для сигнала 1 (snr1):",
-            "snr2": "SNR для сигнала 2 (snr2):",
-            "type": "Тип модуляции (0 - АМ, 1 - ФМ-2, 2 - МЧМ):"
+            "fd":      "Частота дискретизации (Гц):",
+            "f":       "Несущая частота (Гц):",
+            "n":       "Количество бит информации:",
+            "vel":     "Скорость информации (б/сек):",
+            "dt":      "Временное смещение (отсчеты):",
+            "snr1":    "SNR для сигнала 1 (дБ):",
+            "snr2":    "SNR для сигнала 2 (дБ):",
+            "type":    "Тип модуляции (\"0\" - АМ, \"1\" - ФМ-2, \"2\" - МЧМ):",
+            "sigSize": "Размер искомого сигнала в процентах:"
         }
-        
+
         self.demo_param_entries = {}
         row = 0
         col = 0
@@ -117,7 +120,7 @@ class SignalAnalyzerApp:
             self.demo_param_entries[key] = entry
             
             col += 1
-            if col > 2:  # 3 колонки в ряду
+            if col > 4:  # 3 колонки в ряду
                 col = 0
                 row += 1
         
@@ -179,17 +182,18 @@ class SignalAnalyzerApp:
         
         # Создаем поля для параметров исследования
         research_param_labels = {
-            "fd": "Частота дискретизации (fd):",
-            "f": "Несущая частота (f):",
-            "n": "Количество бит информации (n):",
-            "vel": "Скорость информации (vel):",
-            "snr_static": "Статическое SNR (snr_static):",
-            "snr_min": "Минимальное SNR (snr_min):",
-            "snr_max": "Максимальное SNR (snr_max):",
-            "n_points": "Количество точек (n_points):",
-            "n_runs": "Количество испытаний (n_runs):"
+            "fd": "Частота дискретизации (Гц):",
+            "f":  "Несущая частота (Гц):",
+            "n": "Количество бит информации:",
+            "vel": "Скорость информации (б/сек):",
+            "snr_static": "Статическое SNR (дБ):",
+            "snr_min": "Минимальное SNR (дБ):",
+            "snr_max": "Максимальное SNR (дБ):",
+            "n_points": "Количество точек:",
+            "n_runs": "Количество испытаний:",
+            "sigSize": "Размер искомого сигнала в процентах:"
         }
-        
+
         self.research_param_entries = {}
         row = 0
         col = 0
@@ -205,7 +209,7 @@ class SignalAnalyzerApp:
             self.research_param_entries[key] = entry
             
             col += 1
-            if col > 2:  # 3 колонки в ряду
+            if col > 4:  # 3 колонки в ряду
                 col = 0
                 row += 1
         
@@ -257,7 +261,7 @@ class SignalAnalyzerApp:
             self.status_var.set("Режим: Демонстрационный")
         else:
             self.current_mode = "research"
-            self.status_var.set("Режим: Исследование BER")
+            self.status_var.set("Режим: Исследование")
     
     def get_demo_parameters(self):
         """Получение параметров демо режима из полей ввода"""
@@ -371,7 +375,8 @@ class SignalAnalyzerApp:
             str(params["dt"]),
             str(params["snr1"]),
             str(params["snr2"]),
-            str(params["type"])
+            str(params["type"]),
+            str(params["sigSize"])
         ]
         
         self.status_var.set("Запуск data_processing...")
@@ -391,7 +396,8 @@ class SignalAnalyzerApp:
             str(params["vel"]),
             str(params["snr_static"]),  # snr1 - статическое значение
             str(snr2),                  # snr2 - переменное значение
-            str(params["n_runs"])       # Количество испытаний
+            str(params["n_runs"]),       # Количество испытаний
+            str(params["sigSize"])
         ]
         
         self.status_var.set(f"Точка {point_index+1}/{total_points}, SNR={snr2:.2f} дБ")
@@ -587,9 +593,9 @@ class SignalAnalyzerApp:
                                             linewidth=2,
                                             markersize=6)
             
-            self.research_ax.set_title('Зависимость BER от SNR для различных типов модуляции', fontsize=14)
+            self.research_ax.set_title('Зависимость Вероятности ошибки от SNR для различных типов модуляции', fontsize=14)
             self.research_ax.set_xlabel('SNR (дБ)', fontsize=12)
-            self.research_ax.set_ylabel('Bit Error Rate (BER)', fontsize=12)
+            self.research_ax.set_ylabel('Вероятность ошибки', fontsize=12)
             self.research_ax.legend(fontsize=10)
             self.research_ax.grid(True, alpha=0.3, which='both')
             self.research_ax.set_yscale('log')
@@ -598,11 +604,11 @@ class SignalAnalyzerApp:
             self.research_fig.tight_layout()
             self.research_canvas.draw()
             
-            self.status_var.set("График BER успешно отображен")
+            self.status_var.set("График Вероятности успешно отображен")
             self.progress_var.set(100)
             
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка при отображении графика BER:\n{str(e)}")
+            messagebox.showerror("Ошибка", f"Ошибка при отображении графика Вероятности ошибки:\n{str(e)}")
     
     def demo_processing_thread(self):
         """Поток обработки данных для демо режима"""
@@ -671,7 +677,7 @@ class SignalAnalyzerApp:
                 return
             
             # Шаг 2: Очистка старых BER файлов
-            self.status_var.set("Очистка старых данных BER...")
+            self.status_var.set("Очистка старых данных ...")
             self.cleanup_ber_files()
             
             self.progress_var.set(5)
@@ -694,7 +700,7 @@ class SignalAnalyzerApp:
                 time.sleep(0.1)  # Небольшая пауза между запусками
             
             # Шаг 5: Загрузка BER данных
-            self.status_var.set("Загрузка данных BER...")
+            self.status_var.set("Загрузка данных ...")
             self.progress_var.set(95)
             
             ber_data = self.load_ber_files()
@@ -702,10 +708,10 @@ class SignalAnalyzerApp:
                 return
             
             # Шаг 6: Отображение графика
-            self.status_var.set("Построение графика BER...")
+            self.status_var.set("Построение графика ...")
             self.show_research_plot(ber_data, snr_values)
             
-            messagebox.showinfo("Успех", "Исследование BER завершено успешно!")
+            messagebox.showinfo("Успех", "Исследование завершено успешно!")
             
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка в процессе исследования: {str(e)}")

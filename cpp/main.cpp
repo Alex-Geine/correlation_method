@@ -17,6 +17,7 @@ void parceCfg(cfg& cfg, char* argv[])
     cfg.snr1 = std::stod(argv[6]);
     cfg.snr2 = std::stod(argv[7]);
     cfg.type = static_cast<SignalType>(std::stoi(argv[8]));
+    cfg.size_per = std::stod(argv[9]);
 }
 
 // Parse Cfg for the researching
@@ -30,6 +31,7 @@ void parceCfgResearch(cfg& cfg, uint32_t& numRans, char* argv[])
     cfg.snr2 = std::stod(argv[6]);
     numRans  = std::stoi(argv[7]);
     cfg.is_random_dt = true;
+    cfg.size_per = std::stod(argv[8]);
 }
 
 // Функция для запуска обработки в потоке
@@ -41,7 +43,7 @@ void runProcessor(DataProcessor& processor, const cfg& config, uint32_t numRans)
 
 int main(int argc, char* argv[])
 {
-    if (argc != 9 && argc != 8)
+    if (argc != 9 && argc != 10)
     {
         std::cerr << "Incorrect input number of parameters: " << argc << std::endl;
         std::cerr << "Usage for demo: " << argv[0] << " fd f n vel dt snr1 snr2 type" << std::endl;
@@ -52,7 +54,7 @@ int main(int argc, char* argv[])
     cfg config;
     uint32_t num_runs = 0;
     
-    if (argc == 9)
+    if (argc == 10)
     {
         parceCfg(config, argv);
     }
@@ -63,14 +65,14 @@ int main(int argc, char* argv[])
 
     switch (argc)
     {
-    case 9:  // Demonstration mode
+    case 10:  // Demonstration mode
     {
         DataProcessor proc;
         proc.config(config);
         proc.run();
         break;
     }
-    case 8:  // Researching mode
+    case 9:  // Researching mode
     {
         // Создаем процессоры для каждого типа модуляции
         DataProcessor am;  // AM
